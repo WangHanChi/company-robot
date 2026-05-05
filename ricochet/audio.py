@@ -55,17 +55,17 @@ def _make_sweep(f_start, f_end, duration_ms, volume=0.2, sample_rate=22050):
 class Audio:
     def __init__(self):
         self.enabled = False
-        try:
-            if pygame.mixer.get_init():
-                pygame.mixer.quit()
-            pygame.mixer.init(22050, -16, 2, 512)
-            self.slide_snd = _make_sweep(700, 400, 140, 0.18)
-            self.thunk_snd = _make_tone(110, 110, 0.28, decay=True, waveform='square')
-            self.win_snd = _make_chord([523, 659, 784], 380, 0.32)
-            self.select_snd = _make_tone(880, 45, 0.10)
-            self.enabled = True
-        except Exception as e:
-            print(f"音效初始化失敗（將以靜音執行）: {e}")
+        # try:
+        #     if pygame.mixer.get_init():
+        #         pygame.mixer.quit()
+        #     pygame.mixer.init(22050, -16, 2, 512)
+        #     self.slide_snd = _make_sweep(700, 400, 140, 0.18)
+        #     self.thunk_snd = _make_tone(110, 110, 0.28, decay=True, waveform='square')
+        #     self.win_snd = _make_chord([523, 659, 784], 380, 0.32)
+        #     self.select_snd = _make_tone(880, 45, 0.10)
+        #     self.enabled = True
+        # except Exception as e:
+        #     print(f"音效初始化失敗（將以靜音執行）: {e}")
 
     def slide(self):
         if self.enabled: self.slide_snd.play()

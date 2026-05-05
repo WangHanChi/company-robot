@@ -6,10 +6,10 @@ import pygame
 from .model import CENTER_BLOCK, COLOR_ZH, ZH_TO_COLOR
 
 
-_BUNDLED_FONT = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)),
-    '..', 'assets', 'fonts', 'NotoSansTC-Regular.ttf')
-
+# _BUNDLED_FONT = os.path.join(
+#     os.path.dirname(os.path.abspath(__file__)),
+#     '..', 'assets', 'fonts', 'NotoSansTC-Regular.ttf')
+_BUNDLED_FONT = "assets/fonts/NotoSansTC-Regular.ttf"
 
 COLORS = {
     'Red': (220, 50, 50),
