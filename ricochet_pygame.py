@@ -13,20 +13,21 @@ class RicochetRobotsPygame:
         self.height = 16
         self.cell_size = 40
         self.margin_top = 60
-        self.margin_bottom = 100 
-        
+        self.margin_bottom = 100
+        self.offset_x = 0
+
         screen_width = self.width * self.cell_size
         screen_height = self.height * self.cell_size + self.margin_top + self.margin_bottom
-        self.screen = pygame.display.set_mode((screen_width, screen_height))
-        
-        font_path = pygame.font.match_font('stheitilight,arialunicode,pingfanghk,microsoftjhonghei,simhei')
-        if font_path:
-            self.font = pygame.font.Font(font_path, 20)
-            self.title_font = pygame.font.Font(font_path, 24)
-        else:
-            self.font = pygame.font.Font(None, 24)
-            self.title_font = pygame.font.Font(None, 28)
+        self.screen = pygame.display.set_mode((screen_width, screen_height), pygame.RESIZABLE)
+
+        self._font_path = pygame.font.match_font(
+            'stheitilight,arialunicode,pingfanghk,microsoftjhonghei,simhei,'
+            'notosanscjk,notosanscjktc,notosanscjksc,notosansctc,'
+            'wqyzenhei,wqymicrohei,droidsansfallback,unifont'
+        )
+        if not self._font_path:
             print("警告：找不到合適的中文系統字體，文字可能無法正確顯示。")
+        self._on_resize(*self.screen.get_size())
             
         self.colors = {
             'Red': (220, 50, 50),
@@ -46,6 +47,29 @@ class RicochetRobotsPygame:
         self.show_optimal_steps = False
         
         self.generate_random_board()
+
+    def _load_fonts(self):
+        size = max(14, self.cell_size // 2)
+        title_size = max(16, self.cell_size // 2 + 4)
+        if self._font_path:
+            self.font = pygame.font.Font(self._font_path, size)
+            self.title_font = pygame.font.Font(self._font_path, title_size)
+        else:
+            self.font = pygame.font.Font(None, size + 4)
+            self.title_font = pygame.font.Font(None, title_size + 4)
+
+    def _on_resize(self, w, h):
+        # Two-case formula to avoid circular dependency:
+        # cs >= 32: margins = cs*4, so total = cs*20 → cs = h//20
+        # cs < 32:  margins fixed at 125,           → cs = (h-125)//16
+        cs_h = h // 20
+        if cs_h < 32:
+            cs_h = (h - 125) // 16
+        self.cell_size = max(20, min(w // self.width, cs_h))
+        self.margin_top = max(45, int(self.cell_size * 1.5))
+        self.margin_bottom = max(80, int(self.cell_size * 2.5))
+        self.offset_x = (w - self.width * self.cell_size) // 2
+        self._load_fonts()
 
     def generate_random_board(self):
         self.all_targets = []
@@ -210,10 +234,14 @@ class RicochetRobotsPygame:
 
     def draw(self):
         self.screen.fill(self.colors['White'])
-        
+
+        cs = self.cell_size
+        offset_x = self.offset_x
+        offset_y = self.margin_top
+
         tc, tx, ty, _ = self.current_target
         target_color_zh = self.get_color_name(tc)
-        
+
         if self.calculating:
             opt_str = "計算最佳解中..."
         elif self.show_optimal_steps:
@@ -223,83 +251,82 @@ class RicochetRobotsPygame:
                 opt_str = "最佳解: 20步以上 (或無解)"
         else:
             opt_str = "最佳解: (點擊畫面顯示)"
-            
+
         if self.won:
             msg = f"太棒了！共花 {self.moves} 步。按「空白鍵」下一關！"
             status_color = self.colors['Green']
         else:
             msg = f"目標：【{target_color_zh}色】到方塊處 (已走:{self.moves}步 | {opt_str})"
             status_color = self.colors['Black']
-            
+
         text_surface = self.title_font.render(msg, True, status_color)
-        self.screen.blit(text_surface, (10, 15))
-        
-        offset_y = self.margin_top
-        
+        title_h = text_surface.get_height()
+        self.screen.blit(text_surface, (offset_x, (offset_y - title_h) // 2))
+
         for x in range(self.width):
             for y in range(self.height):
-                rect = pygame.Rect(x * self.cell_size, offset_y + y * self.cell_size, self.cell_size, self.cell_size)
+                rect = pygame.Rect(offset_x + x * cs, offset_y + y * cs, cs, cs)
                 pygame.draw.rect(self.screen, self.colors['Gray'], rect, 1)
-                
                 if 7 <= x <= 8 and 7 <= y <= 8:
                     pygame.draw.rect(self.screen, self.colors['Black'], rect)
 
-        target_rect = pygame.Rect(tx * self.cell_size + 10, offset_y + ty * self.cell_size + 10, self.cell_size - 20, self.cell_size - 20)
+        inner = cs // 4
+        target_rect = pygame.Rect(offset_x + tx * cs + inner, offset_y + ty * cs + inner, cs - inner * 2, cs - inner * 2)
         pygame.draw.rect(self.screen, self.colors[tc], target_rect)
         pygame.draw.rect(self.screen, self.colors['Black'], target_rect, 2)
 
         if self.selected_robot and not self.won:
             rx, ry = self.robots[self.selected_robot]
-            sel_rect = pygame.Rect(rx * self.cell_size, offset_y + ry * self.cell_size, self.cell_size, self.cell_size)
+            sel_rect = pygame.Rect(offset_x + rx * cs, offset_y + ry * cs, cs, cs)
             pygame.draw.rect(self.screen, self.colors['Highlight'], sel_rect, 0)
 
-        wall_thick = 4
+        wall_thick = max(2, cs // 10)
+        grid_w = self.width * cs
+        grid_h = self.height * cs
         for y in range(self.height):
             for x in range(self.width):
-                x0 = x * self.cell_size
-                y0 = offset_y + y * self.cell_size
-                
+                x0 = offset_x + x * cs
+                y0 = offset_y + y * cs
                 if self.h_walls[y][x] or y == 0:
-                    pygame.draw.line(self.screen, self.colors['Black'], (x0, y0), (x0 + self.cell_size, y0), wall_thick)
+                    pygame.draw.line(self.screen, self.colors['Black'], (x0, y0), (x0 + cs, y0), wall_thick)
                 if self.v_walls[y][x] or x == 0:
-                    pygame.draw.line(self.screen, self.colors['Black'], (x0, y0), (x0, y0 + self.cell_size), wall_thick)
-                    
-        pygame.draw.line(self.screen, self.colors['Black'], (0, offset_y + self.height * self.cell_size), (self.width * self.cell_size, offset_y + self.height * self.cell_size), wall_thick)
-        pygame.draw.line(self.screen, self.colors['Black'], (self.width * self.cell_size, offset_y), (self.width * self.cell_size, offset_y + self.height * self.cell_size), wall_thick)
+                    pygame.draw.line(self.screen, self.colors['Black'], (x0, y0), (x0, y0 + cs), wall_thick)
 
-        radius = self.cell_size // 2 - 5
+        pygame.draw.line(self.screen, self.colors['Black'], (offset_x, offset_y + grid_h), (offset_x + grid_w, offset_y + grid_h), wall_thick)
+        pygame.draw.line(self.screen, self.colors['Black'], (offset_x + grid_w, offset_y), (offset_x + grid_w, offset_y + grid_h), wall_thick)
+
+        radius = max(5, cs // 2 - cs // 8)
         for name, pos in self.robots.items():
             rx, ry = pos
-            center_x = rx * self.cell_size + self.cell_size // 2
-            center_y = offset_y + ry * self.cell_size + self.cell_size // 2
-            
+            center_x = offset_x + rx * cs + cs // 2
+            center_y = offset_y + ry * cs + cs // 2
             pygame.draw.circle(self.screen, self.colors[name], (center_x, center_y), radius)
             pygame.draw.circle(self.screen, self.colors['Black'], (center_x, center_y), radius, 2)
-            
             if name == self.selected_robot and not self.won:
-                pygame.draw.circle(self.screen, self.colors['Black'], (center_x, center_y), radius + 2, 4) 
-                
+                pygame.draw.circle(self.screen, self.colors['Black'], (center_x, center_y), radius + 2, 4)
+
         info = "空白:換目標 | R:回原位 | H:提示 | N:重生地圖與機器人"
         reset_text = self.font.render(info, True, self.colors['Black'])
-        self.screen.blit(reset_text, (10, offset_y + self.height * self.cell_size + 15))
+        self.screen.blit(reset_text, (offset_x, offset_y + grid_h + cs // 3))
 
         if self.show_hint:
             if self.optimal_steps != -1 and len(self.solution_path) > 0:
                 sim_robots = copy.deepcopy(self.initial_robots)
                 zh_to_color = {'紅': 'Red', '藍': 'Blue', '綠': 'Green', '黃': 'Yellow'}
                 dir_map = {'上': (0, -1), '下': (0, 1), '左': (-1, 0), '右': (1, 0)}
-                
+
                 for step_idx, (color_zh, dir_name) in enumerate(self.solution_path):
                     robot_color = zh_to_color.get(color_zh)
                     if not robot_color: continue
-                    
+
                     dx, dy = dir_map.get(dir_name, (0, 0))
                     curr_x, curr_y = sim_robots[robot_color]
-                    
-                    offset_shift = (step_idx % 3) * 4 - 4
-                    start_x = curr_x * self.cell_size + self.cell_size // 2 + offset_shift
-                    start_y = offset_y + curr_y * self.cell_size + self.cell_size // 2 + offset_shift
-                    
+
+                    shift_unit = cs // 8
+                    offset_shift = (step_idx % 3) * shift_unit - shift_unit
+                    start_x = offset_x + curr_x * cs + cs // 2 + offset_shift
+                    start_y = offset_y + curr_y * cs + cs // 2 + offset_shift
+
                     test_x, test_y = curr_x, curr_y
                     while True:
                         if dx == 1:
@@ -310,28 +337,28 @@ class RicochetRobotsPygame:
                             if test_y + 1 >= self.height or self.h_walls[test_y + 1][test_x]: break
                         elif dy == -1:
                             if test_y <= 0 or self.h_walls[test_y][test_x]: break
-                            
+
                         next_x, next_y = test_x + dx, test_y + dy
                         if 7 <= next_x <= 8 and 7 <= next_y <= 8: break
-                        
+
                         collision = False
                         for c, pos in sim_robots.items():
                             if pos[0] == next_x and pos[1] == next_y:
                                 collision = True
                                 break
                         if collision: break
-                        
+
                         test_x, test_y = next_x, next_y
-                        
+
                     sim_robots[robot_color] = [test_x, test_y]
-                    
-                    end_x = test_x * self.cell_size + self.cell_size // 2 + offset_shift
-                    end_y = offset_y + test_y * self.cell_size + self.cell_size // 2 + offset_shift
-                    
+
+                    end_x = offset_x + test_x * cs + cs // 2 + offset_shift
+                    end_y = offset_y + test_y * cs + cs // 2 + offset_shift
+
                     if (start_x, start_y) != (end_x, end_y):
-                        pygame.draw.line(self.screen, self.colors[robot_color], (start_x, start_y), (end_x, end_y), 4)
-                        
-                        head_len = 8
+                        pygame.draw.line(self.screen, self.colors[robot_color], (start_x, start_y), (end_x, end_y), max(2, cs // 10))
+
+                        head_len = max(6, cs // 5)
                         if dx == 1:
                             pts = [(end_x, end_y), (end_x - head_len, end_y - head_len), (end_x - head_len, end_y + head_len)]
                         elif dx == -1:
@@ -342,26 +369,27 @@ class RicochetRobotsPygame:
                             pts = [(end_x, end_y), (end_x - head_len, end_y + head_len), (end_x + head_len, end_y + head_len)]
                         else:
                             pts = []
-                            
+
                         if pts:
                             pygame.draw.polygon(self.screen, self.colors[robot_color], pts)
-                            
+
                         mid_x = start_x + (end_x - start_x) * 0.7
                         mid_y = start_y + (end_y - start_y) * 0.7
-                        pygame.draw.circle(self.screen, self.colors['White'], (int(mid_x), int(mid_y)), 10)
-                        pygame.draw.circle(self.screen, self.colors['Black'], (int(mid_x), int(mid_y)), 10, 1)
+                        step_r = max(7, cs // 4)
+                        pygame.draw.circle(self.screen, self.colors['White'], (int(mid_x), int(mid_y)), step_r)
+                        pygame.draw.circle(self.screen, self.colors['Black'], (int(mid_x), int(mid_y)), step_r, 1)
                         step_text = self.font.render(str(step_idx + 1), True, self.colors['Black'])
                         text_rect = step_text.get_rect(center=(int(mid_x), int(mid_y)))
                         self.screen.blit(step_text, text_rect)
-                        
+
             elif self.calculating:
                 hint_str = "解答: 計算中..."
                 hint_text = self.font.render(hint_str, True, self.colors['Blue'])
-                self.screen.blit(hint_text, (10, offset_y + self.height * self.cell_size + 45))
+                self.screen.blit(hint_text, (offset_x, offset_y + grid_h + cs))
             else:
                 hint_str = "解答: 20 步內無解 (地圖可能將目標封死，請按 N 重生)"
                 hint_text = self.font.render(hint_str, True, self.colors['Blue'])
-                self.screen.blit(hint_text, (10, offset_y + self.height * self.cell_size + 45))
+                self.screen.blit(hint_text, (offset_x, offset_y + grid_h + cs))
 
         pygame.display.flip()
 
@@ -373,14 +401,16 @@ class RicochetRobotsPygame:
 
     def handle_click(self, mouse_pos):
         if self.won or self.calculating: return
-        
+
         mx, my = mouse_pos
+        offset_x = self.offset_x
         offset_y = self.margin_top
         if my < offset_y or my > offset_y + self.height * self.cell_size: return
-            
-        grid_x = mx // self.cell_size
+        if mx < offset_x or mx > offset_x + self.width * self.cell_size: return
+
+        grid_x = (mx - offset_x) // self.cell_size
         grid_y = (my - offset_y) // self.cell_size
-        
+
         clicked = self.get_robot_at(grid_x, grid_y)
         if clicked:
             self.selected_robot = clicked
@@ -433,6 +463,12 @@ class RicochetRobotsPygame:
                 if event.type == pygame.QUIT:
                     pygame.quit()
                     sys.exit()
+                elif event.type == pygame.VIDEORESIZE:  # pygame 1.x
+                    self.screen = pygame.display.set_mode((event.w, event.h), pygame.RESIZABLE)
+                    self._on_resize(event.w, event.h)
+                elif hasattr(pygame, 'WINDOWRESIZED') and event.type == pygame.WINDOWRESIZED:  # pygame 2.x
+                    w, h = self.screen.get_size()
+                    self._on_resize(w, h)
                 elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     self.show_optimal_steps = True
                     self.handle_click(event.pos)
